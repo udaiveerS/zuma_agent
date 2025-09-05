@@ -21,7 +21,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_parent_id ON messages(parent_id);
 CREATE INDEX IF NOT EXISTS idx_messages_role_date ON messages(role, created_date);
 
 -- Create GIN index for JSONB content search
-CREATE INDEX IF NOT EXISTS idx_messages_content ON messages USING GIN ((message->>'content'));
+CREATE INDEX IF NOT EXISTS idx_messages_content ON messages USING GIN (message);
 
 -- Insert sample data (optional - remove in production)
 INSERT INTO messages (message, role, created_date) VALUES 
@@ -32,4 +32,3 @@ ON CONFLICT DO NOTHING;
 
 -- Grant permissions to the chat user
 GRANT SELECT, INSERT, UPDATE, DELETE ON messages TO chatuser;
-GRANT USAGE, SELECT ON SEQUENCE messages_id_seq TO chatuser;
