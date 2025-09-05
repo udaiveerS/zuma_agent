@@ -1,0 +1,18 @@
+/Users/udaiveer/zuma_agent/backend/app.py:29: DeprecationWarning: 
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+        
+  @app.on_event("startup")
+INFO:     Started server process [71607]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+Loaded 30 messages from database into cache
+INFO:     127.0.0.1:50433 - "POST /api/test-hidden HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50437 - "GET /api/messages?limit=5 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50438 - "GET /api/messages?limit=5&include_hidden=true HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50441 - "POST /api/test-hidden HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50442 - "GET /api/messages?limit=2 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:50447 - "GET /api/messages?limit=3&include_hidden=true HTTP/1.1" 200 OK
