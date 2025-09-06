@@ -1,13 +1,14 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import Optional
-import uuid
-import os
+
+
 from datetime import datetime
 from dotenv import load_dotenv
 
-from db import get_db
+from globals import get_db
 from models import Message
 from schemas import ReplyRequest, ReplyResponse, MessageData, MessageContent, MessageRole
 from cache import message_cache
@@ -15,19 +16,9 @@ from queries import MessageQueries
 
 load_dotenv()
 
-app = FastAPI(title="Chat API", version="1.0.0")
-
-# CORS configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     """Load existing messages from database into cache on startup"""
     db = next(get_db())
     try:
@@ -39,6 +30,22 @@ async def startup_event():
         print("Make sure the database container is running: cd database && ./manage.sh start")
     finally:
         db.close()
+    
+    yield  # Application runs here
+    
+    # Shutdown (optional cleanup)
+    print("Application shutting down...")
+
+app = FastAPI(title="Chat API", version="1.0.0", lifespan=lifespan)
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def root():
@@ -63,16 +70,38 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
         )
         
         # 2. Get chat history from cache for context
-        chat_history = get_chat_history_from_cache(limit=500)
+        recent_messages = message_cache.get_message_history(limit=100, visible_only=False)
+                
+
+        # Generate response using the agent
+        from globals import get_agent
+        agent = get_agent()
         
-        # 3. Generate assistant response using context
-        lead_name = "guest"
-        if request.lead and isinstance(request.lead, dict):
-            lead_name = request.lead.get("name", "guest")
+        # Convert to format expected by agent (list of dicts with role/content)
+        conversation_history = []
+        for msg in recent_messages[:-1]:  # Exclude the current user message we just added
+            conversation_history.append({
+                "role": msg.get("role", "user"),
+                "content": msg.get("message", {}).get("content", "")
+            })
         
-        # Generate response (in the future, this would use chat_history for context)
-        assistant_content = f"Thanks {lead_name} — ref={uuid.uuid4()}"
+        # Build context from request
+        context = {
+            "community_id": request.community_id,
+            "move_in_date": request.preferences.get("move_in") if request.preferences else None,
+            "bedrooms": request.preferences.get("bedrooms") if request.preferences else None,
+            "name": request.lead.get("name") if request.lead else None,
+            "email": request.lead.get("email") if request.lead else None,
+        }
         
+        # Get agent response using RouterPrompt (like in booking_agent/main.py)
+        from booking_agent.prompts.router_prompt import RouterPrompt
+        router = RouterPrompt(request.message, context=context)
+        agent_response = agent.run(router, conversation_history)
+
+        # get chain of though from agent and save to to cache and db (TODO) 
+        assistant_content = agent_response.response
+
         # 4. Save assistant response to database and cache
         assistant_message = save_message_and_cache(
             db=db,
@@ -93,8 +122,12 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
         return response
         
     except Exception as e:
+        print(f"❌ ERROR in reply_endpoint: {str(e)}")
+        import traceback
+        print(f"📍 Full traceback:\n{traceback.format_exc()}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
 
 @app.get("/api/messages")
 async def get_messages(limit: int = 100, include_hidden: bool = False):
@@ -153,4 +186,4 @@ def get_chat_history_from_cache(limit: int = 500, include_hidden: bool = True) -
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=False, workers=1)

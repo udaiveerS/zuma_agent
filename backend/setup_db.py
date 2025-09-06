@@ -4,7 +4,7 @@ Database connection test script.
 Tests the connection to the PostgreSQL container.
 """
 
-from db import get_db, engine
+from globals.database import get_db, engine
 from sqlalchemy import text
 
 def test_database():
