@@ -12,6 +12,9 @@ class MessageQueries:
     
     @staticmethod
     def get_recent_messages(db: Session, limit: int = 100) -> List[Dict[str, Any]]:
-        """Get recent messages ordered by creation date"""
+        """Get recent messages ordered by creation date (oldest first for proper conversation flow)"""
+        # Get the most recent messages, but return them in chronological order
         messages = db.query(Message).order_by(desc(Message.created_date)).limit(limit).all()
+        # Reverse to get chronological order (oldest first)
+        messages.reverse()
         return [msg.to_dict() for msg in messages]

@@ -6,6 +6,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 -- Communities table
 CREATE TABLE IF NOT EXISTS communities (
     community_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    identifier TEXT UNIQUE NOT NULL,  -- e.g. "sunset-ridge", "downtown-lofts"
     name TEXT NOT NULL,
     timezone TEXT
 );
@@ -70,10 +71,15 @@ CREATE INDEX IF NOT EXISTS bookings_by_unit_time ON bookings (unit_id, start_tim
 -- Note: Leaving existing messages table unchanged
 
 -- Insert sample data for testing
-INSERT INTO communities (name, timezone) VALUES 
-    ('Sunset Ridge Apartments', 'America/Los_Angeles'),
-    ('Downtown Lofts', 'America/New_York')
+INSERT INTO communities (identifier, name, timezone) VALUES 
+    ('sunset-ridge', 'Sunset Ridge Apartments', 'America/Los_Angeles'),
+    ('downtown-lofts', 'Downtown Lofts', 'America/New_York')
 ON CONFLICT DO NOTHING;
+
+-- Add some community identifier comments for easier testing
+-- Community identifiers that can be used:
+-- "Sunset Ridge Apartments" or "sunset-ridge" -> Sunset Ridge Apartments
+-- "Downtown Lofts" or "downtown-lofts" -> Downtown Lofts
 
 -- Get community IDs for sample data
 DO $$
@@ -81,15 +87,18 @@ DECLARE
     sunset_id UUID;
     downtown_id UUID;
 BEGIN
-    SELECT community_id INTO sunset_id FROM communities WHERE name = 'Sunset Ridge Apartments';
-    SELECT community_id INTO downtown_id FROM communities WHERE name = 'Downtown Lofts';
+    SELECT community_id INTO sunset_id FROM communities WHERE identifier = 'sunset-ridge';
+    SELECT community_id INTO downtown_id FROM communities WHERE identifier = 'downtown-lofts';
     
     -- Insert sample units
-    INSERT INTO units (community_id, unit_code, bedrooms, bathrooms, availability_status, rent, specials) VALUES 
-        (sunset_id, 'A101', 1, 1.0, 'available', 1200.00, '[]'),
-        (sunset_id, 'A102', 1, 1.0, 'occupied', 1200.00, '[]'),
-        (sunset_id, 'B201', 2, 2.0, 'available', 1800.00, '[{"type": "move_in", "description": "First month free", "value": 1800}]'),
-        (downtown_id, 'L301', 2, 2.0, 'available', 2500.00, '[]')
+    INSERT INTO units (community_id, unit_code, bedrooms, bathrooms, availability_status, available_at, rent, specials) VALUES 
+        (sunset_id, 'A101', 1, 1.0, 'available', NULL, 1200.00, '[]'),
+        (sunset_id, 'A102', 1, 1.0, 'occupied', NULL, 1200.00, '[]'),
+        (sunset_id, 'A103', 1, 1.0, 'notice', '2025-08-01'::timestamptz, 1250.00, '[]'),
+        (sunset_id, 'B201', 2, 2.0, 'available', NULL, 1800.00, '[{"type": "move_in", "description": "First month free", "value": 1800}]'),
+        (sunset_id, 'B202', 2, 2.0, 'notice', '2025-07-15'::timestamptz, 1850.00, '[]'),
+        (downtown_id, 'L301', 2, 2.0, 'available', NULL, 2500.00, '[]'),
+        (downtown_id, 'L302', 2, 2.0, 'notice', '2025-09-01'::timestamptz, 2600.00, '[{"type": "early_lease", "description": "Sign early and save $200/month", "value": 200}]')
     ON CONFLICT DO NOTHING;
     
     -- Insert sample policies

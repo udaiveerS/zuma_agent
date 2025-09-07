@@ -1,4 +1,4 @@
-# prompts/get_property_info.py
+# prompts/booking_info_prompt.py
 from .base_prompt import ToolPrompt
 from typing import Optional, Dict
 import logging
@@ -10,8 +10,8 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 
-class GetPropertyInfoPrompt(ToolPrompt):
-    """Prompt for handling property and unit availability queries."""
+class BookingInfoPrompt(ToolPrompt):
+    """Prompt for handling all leasing and booking-related conversations with horizontal access to tools."""
     
     def __init__(self, user_query: str, context: Optional[Dict] = None):
         self.original_query = user_query
@@ -22,8 +22,8 @@ class GetPropertyInfoPrompt(ToolPrompt):
         bedrooms = context.get('bedrooms', '') if context else ''
         user_name = context.get('name', 'there') if context else 'there'
         
-        # Build property info prompt
-        property_info_prompt = f"""
+        # Build booking info prompt
+        booking_info_prompt = f"""
 You are a leasing assistant for {community_id or 'this community'}.
 
 Context: Bedrooms: {bedrooms or 'not specified'}, Name: {user_name}
@@ -79,13 +79,13 @@ RESPONSE STYLE: When listing available units:
 - ONLY mention timing if user specifically asks "when are they available?" or "availability dates"
 """
         
-        super().__init__(property_info_prompt, context=context)
+        super().__init__(booking_info_prompt, context=context)
         
     def execute(self, agent, msgs, request_id=None):
-        """Execute the property info prompt."""
+        """Execute the booking info prompt."""
         # Log entry with request_id for tracing
         short_request_id = request_id[:8] if request_id and len(request_id) > 8 else request_id
-        logger.info(f"🏠 [{short_request_id}] GetPropertyInfoPrompt.execute() starting | query: '{self.user_query}'")
+        logger.info(f"🏠 [{short_request_id}] BookingInfoPrompt.execute() starting | query: '{self.user_query}'")
         
         # Use ToolPrompt's structured output execution with proper request_id
         result = super().execute(agent, msgs, request_id=request_id)
@@ -95,7 +95,7 @@ RESPONSE STYLE: When listing available units:
             result.propose_time = self._generate_next_tour_slot()
             logger.info(f"🏠 [{short_request_id}] Tour time generated: {result.propose_time}")
         
-        logger.info(f"🏠 [{short_request_id}] GetPropertyInfoPrompt.execute() completed | action: {result.action.value}")
+        logger.info(f"🏠 [{short_request_id}] BookingInfoPrompt.execute() completed | action: {result.action.value}")
         return result
     
     def _generate_next_tour_slot(self) -> str:

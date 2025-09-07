@@ -15,40 +15,40 @@ def check_availability(community_id: str, bedrooms: int, move_in_date: str = Non
     """Check availability for a community matching bedroom count and move-in date."""
     try:
         db = next(get_db())
-        
-        units = db_get_available_units(
-            db=db, 
-            community_id=community_id, 
-            bedrooms=bedrooms, 
-            move_in_date=move_in_date
-        )
-        
-        db.close()
-        
-        if units is None:
+        try:
+            units = db_get_available_units(
+                db=db, 
+                community_id=community_id, 
+                bedrooms=bedrooms, 
+                move_in_date=move_in_date
+            )
+            
+            if units is None:
+                return {
+                    "success": False,
+                    "error": "Database error occurred",
+                    "units": []
+                }
+            
+            # Return only unit codes and availability status - NO PRICING
+            availability_units = []
+            for unit in units:
+                availability_units.append({
+                    "unit_code": unit.get("unit_code"),
+                    "bedrooms": unit.get("bedrooms"),
+                    "bathrooms": unit.get("bathrooms"),
+                    "availability_status": unit.get("availability_status"),
+                    "available_at": unit.get("available_at")
+                })
+            
             return {
-                "success": False,
-                "error": "Database error occurred",
-                "units": []
+                "success": True,
+                "units": availability_units,
+                "count": len(units)
             }
-        
-        # Return only unit codes and availability status - NO PRICING
-        availability_units = []
-        for unit in units:
-            availability_units.append({
-                "unit_code": unit.get("unit_code"),
-                "bedrooms": unit.get("bedrooms"),
-                "bathrooms": unit.get("bathrooms"),
-                "availability_status": unit.get("availability_status"),
-                "available_at": unit.get("available_at")
-            })
-        
-        return {
-            "success": True,
-            "units": availability_units,
-            "count": len(units)
-        }
-        
+        finally:
+            db.close()  # Always close, even if exception occurs
+            
     except Exception as e:
         return {
             "success": False,
@@ -61,34 +61,34 @@ def get_pricing(community_id: str, unit_id: str, move_in_date: str = None) -> Di
     """Get pricing information for a specific unit."""
     try:
         db = next(get_db())
-        
-        pricing = db_get_pricing(
-            db=db, 
-            community_id=community_id, 
-            unit_id=unit_id, 
-            move_in_date=move_in_date
-        )
-        
-        db.close()
-        
-        if pricing is None:
+        try:
+            pricing = db_get_pricing(
+                db=db, 
+                community_id=community_id, 
+                unit_id=unit_id, 
+                move_in_date=move_in_date
+            )
+            
+            if pricing is None:
+                return {
+                    "success": False,
+                    "error": f"Unit '{unit_id}' not found in community '{community_id}'"
+                }
+            
             return {
-                "success": False,
-                "error": f"Unit '{unit_id}' not found in community '{community_id}'"
+                "success": True,
+                "unit_code": pricing.get('unit_code'),
+                "rent": pricing.get('rent'),
+                "specials": pricing.get('specials'),
+                "bedrooms": pricing.get('bedrooms'),
+                "bathrooms": pricing.get('bathrooms'),
+                "availability_status": pricing.get('availability_status'),
+                "available_at": pricing.get('available_at'),
+                "community_name": pricing.get('community_name')
             }
-        
-        return {
-            "success": True,
-            "unit_code": pricing.get('unit_code'),
-            "rent": pricing.get('rent'),
-            "specials": pricing.get('specials'),
-            "bedrooms": pricing.get('bedrooms'),
-            "bathrooms": pricing.get('bathrooms'),
-            "availability_status": pricing.get('availability_status'),
-            "available_at": pricing.get('available_at'),
-            "community_name": pricing.get('community_name')
-        }
-        
+        finally:
+            db.close()  # Always close, even if exception occurs
+            
     except Exception as e:
         return {
             "success": False,
@@ -101,40 +101,41 @@ def check_pet_policy(community_id: str, pet_type: str) -> Dict[str, Any]:
     """Check pet policy for a specific pet type in a community."""
     try:
         db = next(get_db())
-        
-        policy = db_get_pet_policy(db=db, community_id=community_id)
-        db.close()
-        
-        if policy is None:
-            return {
-                "success": False,
-                "error": "No pet policy found for this community"
-            }
-        
-        # Get pet policy rules and look for the pet type
-        pet_policy_rules = policy.get('pet_policy', {})
-        pet_info = pet_policy_rules.get(pet_type.lower())
-        
-        if pet_info:
-            return {
-                "success": True,
-                "pet_type": pet_type,
-                "allowed": pet_info.get('allowed', False),
-                "fee": pet_info.get('fee'),
-                "deposit": pet_info.get('deposit'),
-                "notes": pet_info.get('notes'),
-                "restrictions": pet_info.get('restrictions')
-            }
-        else:
-            # Check for default policy
-            default_policy = pet_policy_rules.get('default', {})
-            return {
-                "success": True,
-                "pet_type": pet_type,
-                "allowed": default_policy.get('allowed', False),
-                "notes": default_policy.get('notes', f"No specific policy for {pet_type}. Contact office for details.")
-            }
-        
+        try:
+            policy = db_get_pet_policy(db=db, community_id=community_id)
+            
+            if policy is None:
+                return {
+                    "success": False,
+                    "error": "No pet policy found for this community"
+                }
+            
+            # Get pet policy rules and look for the pet type
+            pet_policy_rules = policy.get('pet_policy', {})
+            pet_info = pet_policy_rules.get(pet_type.lower())
+            
+            if pet_info:
+                return {
+                    "success": True,
+                    "pet_type": pet_type,
+                    "allowed": pet_info.get('allowed', False),
+                    "fee": pet_info.get('fee'),
+                    "deposit": pet_info.get('deposit'),
+                    "notes": pet_info.get('notes'),
+                    "restrictions": pet_info.get('restrictions')
+                }
+            else:
+                # Check for default policy
+                default_policy = pet_policy_rules.get('default', {})
+                return {
+                    "success": True,
+                    "pet_type": pet_type,
+                    "allowed": default_policy.get('allowed', False),
+                    "notes": default_policy.get('notes', f"No specific policy for {pet_type}. Contact office for details.")
+                }
+        finally:
+            db.close()  # Always close, even if exception occurs
+            
     except Exception as e:
         return {
             "success": False,

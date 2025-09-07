@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 from globals import get_db
 from models import Message
-from schemas import ReplyRequest, ReplyResponse, MessageData, MessageContent, MessageRole
+from schemas import ReplyRequest, ReplyResponse, MessageData, MessageContent, MessageRole, ActionType, BookingResponse
 from cache import message_cache
 from queries import MessageQueries
 
@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     """Load existing messages from database into cache on startup"""
     db = next(get_db())
     try:
-        message_data = MessageQueries.get_recent_messages(db, limit=500)  # Load recent messages
+        message_data = MessageQueries.get_recent_messages(db, limit=50)  # Load recent messages (optimized)
         message_cache.load_from_db(message_data)
         print(f"Loaded {len(message_data)} messages from database into cache")
     except Exception as e:
@@ -70,7 +70,7 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
         )
         
         # 2. Get chat history from cache for context
-        recent_messages = message_cache.get_message_history(limit=100, visible_only=False)
+        recent_messages = message_cache.get_message_history(limit=30, visible_only=False)  # Reduced for performance
                 
 
         # Generate response using the agent
@@ -79,7 +79,7 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
         
         # Convert to format expected by agent (list of dicts with role/content)
         conversation_history = []
-        for msg in recent_messages[:-1]:  # Exclude the current user message we just added
+        for msg in recent_messages:  # Include all messages including current user message
             conversation_history.append({
                 "role": msg.get("role", "user"),
                 "content": msg.get("message", {}).get("content", "")
@@ -97,26 +97,30 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
         # Get agent response using RouterPrompt (like in booking_agent/main.py)
         from booking_agent.prompts.router_prompt import RouterPrompt
         router = RouterPrompt(request.message, context=context)
-        agent_response = agent.run(router, conversation_history)
+        booking_response = agent.run(router, conversation_history, request_id=str(user_message.id))
 
-        # get chain of though from agent and save to to cache and db (TODO) 
-        assistant_content = agent_response.response
+        # Extract content for database storage
+        assistant_content = booking_response.reply
 
-        # 4. Save assistant response to database and cache
-        assistant_message = save_message_and_cache(
+        # 4. Generate UUID first, then save assistant response to database and cache
+        import uuid
+        response_uuid = str(uuid.uuid4())
+        
+        assistant_message = save_message_and_cache_with_id(
             db=db,
+            message_id=response_uuid,
             role=MessageRole.ASSISTANT,
             content=assistant_content,
             parent_id=user_message.id
         )
         
-        # 5. Return the response
+        # 5. Return the response using BookingResponse data
         response = ReplyResponse(
-            message=MessageData(
-                id=str(assistant_message.id),  # Convert UUID to string
-                message=MessageContent(**assistant_message.message),
-                created_date=assistant_message.created_date.isoformat()
-            )
+            id=response_uuid,  # Use the same UUID we saved to DB
+            reply=booking_response.reply,
+            created_date=assistant_message.created_date.isoformat(),  # Use the actual DB timestamp
+            action=booking_response.action,
+            propose_time=booking_response.propose_time
         )
         
         return response
@@ -166,6 +170,35 @@ def save_message_and_cache(db: Session, role: MessageRole, content: str, parent_
     }
     
     message = Message(
+        message=message_jsonb,
+        role=role.value,
+        parent_id=parent_id,
+        visible_to_user=visible_to_user
+    )
+    db.add(message)
+    db.commit()
+    
+    # Add to cache after successful database save
+    cache_data = message.to_dict()
+    message_cache.add_message(cache_data)
+    
+    return message
+
+def save_message_and_cache_with_id(db: Session, message_id: str, role: MessageRole, content: str, parent_id=None, visible_to_user: bool = True) -> Message:
+    """
+    Save a message to database and add to cache with a specific UUID.
+    Returns the saved message object.
+    """
+    import uuid
+    
+    # Create JSONB data for storage
+    message_jsonb = {
+        "role": role.value,
+        "content": content,
+    }
+    
+    message = Message(
+        id=uuid.UUID(message_id),  # Use the provided UUID
         message=message_jsonb,
         role=role.value,
         parent_id=parent_id,
