@@ -22,10 +22,11 @@ This README focuses on the agent design, testing strategy, and observability tar
 1. [System Architecture](#system-architecture) - Complete system diagram with all components
 2. [Backend Data Schema](#backend-data-schema) - Database tables, JSONB usage, and design decisions
 3. [Agent Architecture](#agent-architecture) - Prompt hierarchy, tool registry pattern, and extensibility
-4. [Testing Strategy](#testing-strategy) - Unit tests, integration tests, and database validation
-5. [Observability](#observability) - SLOs, required logging, message storage, and span tracing
-6. [Roadmap (Next Iterations)](#roadmap-next-iterations) - Async execution, eval harness, and feature roadmap
-7. [Running the Project](#running-the-project) - Prerequisites, setup steps, and verification
+4. [MVP Tradeoffs](#mvp-tradeoffs) - Current limitations and production scaling considerations
+5. [Testing Strategy](#testing-strategy) - Unit tests, integration tests, and database validation
+6. [Observability](#observability) - SLOs, required logging, message storage, and span tracing
+7. [Roadmap (Next Iterations)](#roadmap-next-iterations) - Async execution, eval harness, and feature roadmap
+8. [Running the Project](#running-the-project) - Prerequisites, setup steps, and verification
 
 ## System Architecture
 
@@ -180,6 +181,37 @@ agent = Agent(
 ```
 
 This architecture enables rapid iteration: new tools require only registry addition, new prompts inherit base functionality, and the router can dynamically select specialized handlers based on conversation context.
+
+## MVP Tradeoffs
+
+This implementation prioritizes rapid development and proof-of-concept validation over production scalability. Key limitations include:
+
+**In-Memory Caching:**
+- ✅ **Pro**: Fast message retrieval, simple implementation
+- ❌ **Con**: Cache lost on server restart; no horizontal scaling; memory usage grows unbounded
+- **Production needs**: Redis/external cache with TTL policies
+
+**Single Community Support:**
+- ✅ **Pro**: Simplified data model and agent logic
+- ❌ **Con**: Cannot handle multi-tenant scenarios or property management companies
+- **Production needs**: Multi-tenant architecture with community-scoped data isolation
+
+**Basic Tour Scheduling:**
+- ✅ **Pro**: Predictable behavior for testing and demos
+- ❌ **Con**: No calendar integration, availability checking, or timezone handling
+- **Production needs**: Real calendar system with availability slots and booking conflicts
+
+**Logger-Based Observability:**
+- ✅ **Pro**: Simple debugging during development
+- ❌ **Con**: No distributed tracing, metrics aggregation, or production monitoring
+- **Production needs**: OpenTelemetry spans, structured logging, alerting systems
+
+**Synchronous Tool Execution:**
+- ✅ **Pro**: Straightforward request/response flow
+- ❌ **Con**: Sequential tool calls increase response latency
+- **Production needs**: Async scatter/gather pattern for parallel tool execution
+
+These tradeoffs were intentional to ship a working MVP quickly while establishing the core architectural patterns for future scaling.
 
 ## Testing Strategy
 
