@@ -53,3 +53,4 @@ backend/app.log
 # OS
 .DS_Store
 Thumbs.db
+backend/.env
