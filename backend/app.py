@@ -57,9 +57,10 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
     Handle chat reply requests with the following flow:
     1. Save user message to database and cache
     2. Get chat history from cache for context
-    3. Generate assistant response using context
-    4. Save assistant response to database and cache
-    5. Return assistant response
+    3. Route through security classification (RouterPrompt)
+    4. Generate structured BookingResponse using tools if needed
+    5. Save assistant response to database and cache
+    6. Return structured response with action classification
     """
     try:
         # 1. Save user message to database and cache
@@ -142,17 +143,6 @@ async def get_messages(limit: int = 100, include_hidden: bool = False):
         "count": len(messages)
     }
 
-@app.post("/api/test-hidden")
-async def test_hidden_message(db: Session = Depends(get_db)):
-    """Test endpoint to create a hidden message for debugging"""
-    hidden_message = save_message_and_cache(
-        db=db,
-        role=MessageRole.ASSISTANT,
-        content="[INTERNAL] Tool call executed: search_database(query='user_preferences')",
-        visible_to_user=False
-    )
-    
-    return {"message": "Hidden message created", "id": str(hidden_message.id)}
 
 # =============================================================================
 # Helper Functions
