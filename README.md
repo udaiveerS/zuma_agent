@@ -86,20 +86,20 @@ This README focuses on the agent design, testing strategy, and observability tar
 The system uses PostgreSQL with JSONB for flexible storage and structured tables for leasing data:
 
 **Messages Table** (Observability & Chat History):
-- `id`: UUID primary key for external references
-- `message`: JSONB containing role, content, and metadata
-- `role`: Indexed string for fast filtering (user/assistant)
-- `visible_to_user`: Boolean flag for internal vs. user-facing messages
-- `step_id`: Tracks prompt workflow stages (initial, context, reasoning, response, followup)
-- `parent_id`: Links related messages for conversation threading
-- `created_date`: Timestamped for chronological ordering
+- `messages`: Chat messages (id, message, role, visible_to_user, step_id, parent_id, created_date)
+  - `id`: UUID primary key for external references
+  - `message`: JSONB containing role, content, and metadata
+  - `role`: Indexed string for fast filtering (user/assistant)
+  - `visible_to_user`: Boolean flag for internal vs. user-facing messages
+  - `step_id`: Tracks prompt workflow stages (initial, context, reasoning, response, followup)
+  - `parent_id`: Links related messages for conversation threading
 
 **Leasing Tables** (Property Data):
-- `communities`: Property locations with identifiers and timezones
-- `units`: Individual rental units with availability, pricing, and specials (JSONB)
-- `community_policies`: Pet, smoking, and parking rules stored as flexible JSONB
-- `users`: Lead information with preferences stored as JSONB
-- `bookings`: Tour scheduling with status tracking
+- `communities`: Property locations (community_id, identifier, name, timezone)
+- `units`: Rental units (unit_id, community_id, unit_code, bedrooms, bathrooms, availability_status, available_at, rent, specials)
+- `community_policies`: Pet/smoking/parking rules (policy_id, community_id, policy_type, rules as JSONB)
+- `users`: Lead information (user_id, email, name, preferences as JSONB)
+- `bookings`: Tour scheduling (booking_id, community_id, unit_id, booking_type, start_time, end_time, status, user_id)
 
 **Key Design Decisions:**
 - JSONB for flexible, schema-less data (message content, user preferences, specials)
