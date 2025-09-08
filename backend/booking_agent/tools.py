@@ -30,15 +30,15 @@ def check_availability(community_id: str, bedrooms: int, move_in_date: str = Non
                     "units": []
                 }
             
-            # Return only unit codes and availability status - NO PRICING
+            # Return only unit codes and availability status - NO PRICING OR DATES
             availability_units = []
             for unit in units:
                 availability_units.append({
                     "unit_code": unit.get("unit_code"),
                     "bedrooms": unit.get("bedrooms"),
                     "bathrooms": unit.get("bathrooms"),
-                    "availability_status": unit.get("availability_status"),
-                    "available_at": unit.get("available_at")
+                    "availability_status": unit.get("availability_status")
+                    # Removed available_at to prevent model from mentioning dates
                 })
             
             return {
