@@ -46,6 +46,7 @@ docker exec -it chat-postgres psql -U chatuser -d chatdb
 - **users**: Lead information with preferences as JSONB (user_id, email, name, preferences)
 - **bookings**: Tour scheduling (booking_id, community_id, unit_id, booking_type, start_time, end_time, status, user_id)
 
+**Complete Schema**: All 6 database tables are listed above - no additional tables exist.  
 **Auto-initialization**: All tables created on first startup via SQL scripts in `scripts/init/`
 
 ## Production

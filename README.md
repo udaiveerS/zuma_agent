@@ -101,6 +101,8 @@ The system uses PostgreSQL with JSONB for flexible storage and structured tables
 - `users`: Lead information (user_id, email, name, preferences as JSONB)
 - `bookings`: Tour scheduling (booking_id, community_id, unit_id, booking_type, start_time, end_time, status, user_id)
 
+**Complete Database Schema**: All 6 tables listed above comprise the complete database - no additional tables exist.
+
 **Key Design Decisions:**
 - JSONB for flexible, schema-less data (message content, user preferences, specials)
 - UUID primary keys for external API stability
