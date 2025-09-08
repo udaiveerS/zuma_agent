@@ -54,3 +54,4 @@ backend/app.log
 .DS_Store
 Thumbs.db
 backend/.env
+.idea/
