@@ -11,7 +11,7 @@ from leasing_queries.pet_policy import get_pet_policy as db_get_pet_policy
 from leasing_queries.pricing import get_pricing as db_get_pricing
 
 
-def check_availability(community_id: str, bedrooms: int, move_in_date: str = None) -> Dict[str, Any]:
+def check_availability(community_id: str, bedrooms: int) -> Dict[str, Any]:
     """Check availability for a community matching bedroom count and move-in date."""
     try:
         db = next(get_db())
@@ -20,7 +20,6 @@ def check_availability(community_id: str, bedrooms: int, move_in_date: str = Non
                 db=db, 
                 community_id=community_id, 
                 bedrooms=bedrooms, 
-                move_in_date=move_in_date
             )
             
             if units is None:
@@ -160,13 +159,9 @@ TOOLS_SPEC = [
                     "bedrooms": {
                         "type": "integer",
                         "description": "Number of bedrooms required"
-                    },
-                    "move_in_date": {
-                        "type": ["string", "null"],
-                        "description": "Optional desired move-in date in YYYY-MM-DD format. If provided, only shows units available by this date."
                     }
                 },
-                "required": ["community_id", "bedrooms", "move_in_date"],
+                "required": ["community_id", "bedrooms"],
                 "additionalProperties": False,
             },
             "strict": True,

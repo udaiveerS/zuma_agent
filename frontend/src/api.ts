@@ -58,9 +58,9 @@ export const postReply = async (message: string, lead?: Record<string, any>): Pr
     }
 };
 
-export const getMessages = async (limit: number = 100) => {
+export const getMessages = async (email: string, limit: number = 100) => {
     try {
-        const response = await fetch(`${API_BASE_URL}/api/messages?limit=${limit}`);
+        const response = await fetch(`${API_BASE_URL}/api/messages?email=${encodeURIComponent(email)}&limit=${limit}`);
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);

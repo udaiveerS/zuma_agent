@@ -86,13 +86,14 @@ This README focuses on the agent design, testing strategy, and observability tar
 The system uses PostgreSQL with JSONB for flexible storage and structured tables for leasing data:
 
 **Messages Table** (Observability & Chat History):
-- `messages`: Chat messages (id, message, role, visible_to_user, step_id, parent_id, created_date)
+- `messages`: Chat messages (id, message, role, visible_to_user, step_id, parent_id, user_id, created_date)
   - `id`: UUID primary key for external references
   - `message`: JSONB containing role, content, and metadata
   - `role`: Indexed string for fast filtering (user/assistant)
   - `visible_to_user`: Boolean flag for internal vs. user-facing messages
   - `step_id`: Tracks prompt workflow stages (initial, context, reasoning, response, followup)
   - `parent_id`: Links related messages for conversation threading
+  - `user_id`: Foreign key linking messages to specific users for multi-user support
 
 **Leasing Tables** (Property Data):
 - `communities`: Property locations (community_id, identifier, name, timezone)
@@ -362,4 +363,30 @@ cd frontend && npm install && npm start
 
 **Verify**: Visit http://localhost:3000 for chat UI, http://localhost:8000/docs for API documentation.
 
-**Testing**: `cd backend && python tests/integration_tests.py` (requires running server).he 
+**Testing**: `cd backend && python tests/integration_tests.py` (requires running server).
+
+## Recent Updates & Improvements
+
+### December 2024 - Multi-User Support & Enhanced Conversation Flow
+
+#### Multi-User Architecture
+- **User-Specific Message Storage**: Each user's conversation history is stored separately with `user_id` and `email` tracking
+- **Isolated User Caches**: In-memory caching system maintains separate conversation state per user email
+- **Database Schema Updates**: Added `user_id` foreign key to messages table for proper user association
+- **User Preferences Support**: Database schema supports storing user preferences as JSONB for personalized experiences
+
+#### Enhanced Conversation Intelligence
+- **Contextual Tool Usage**: Agent now distinguishes between vague requests requiring clarification and specific queries that warrant tool calls
+- **Improved Request Classification**: Better handling of ambiguous queries like "what do you have available" vs specific requests like "do you have 2 bedroom apartments"
+- **Conservative Tool Calling**: Tools are only invoked when user intent is clear, reducing unnecessary API calls and improving response relevance
+
+#### Technical Improvements
+- **Unified Cache Management**: Streamlined message caching with single method handling optional message IDs
+- **OpenAI Tool Schema Alignment**: Tool function signatures match OpenAI specifications for reliable execution
+- **Database Lifecycle Management**: Proper message loading from database on application startup with user-specific grouping
+- **Frontend Integration**: Hardcoded user credentials ("Jane Doe", "jane@example.com") for consistent demo experience
+
+#### API Enhancements
+- **Email-Based Message Retrieval**: `/api/messages` endpoint requires email parameter for user-specific message history
+- **Structured Response Format**: Consistent JSON format with `id`, `message`, and `created_date` fields for frontend compatibility
+- **Error Handling**: Robust parameter validation and graceful error responses

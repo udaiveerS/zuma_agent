@@ -20,7 +20,8 @@ function App() {
   useEffect(() => {
     const loadInitialMessages = async () => {
       try {
-        const response = await getMessages(100); // Get last 100 messages
+        // Use Jane Doe's email for frontend
+        const response = await getMessages("jane@example.com", 100); // Get last 100 messages
         setMessages(response.messages || []);
         console.log(`Loaded ${response.messages?.length || 0} messages from backend`);
       } catch (error) {
@@ -62,8 +63,12 @@ function App() {
     setMessages(prev => [...prev, typingMessage]);
 
     try {
-      // Call API with just the message string
-      const response = await postReply(message);
+      // Call API with message and lead info
+      const lead = {
+        name: "Jane Doe",
+        email: "jane@example.com"
+      };
+      const response = await postReply(message, lead);
 
       // Remove typing indicator and add real response
       setMessages(prev => {

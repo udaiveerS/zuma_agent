@@ -9,10 +9,11 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 from globals import get_db
-from models import Message
+from models import Message, User
 from schemas import ReplyRequest, ReplyResponse, MessageData, MessageContent, MessageRole, ActionType, BookingResponse
 from cache import message_cache
 from queries import MessageQueries
+from user_service import get_or_create_user
 
 load_dotenv()
 
@@ -23,8 +24,13 @@ async def lifespan(app: FastAPI):
     db = next(get_db())
     try:
         message_data = MessageQueries.get_recent_messages(db, limit=50)  # Load recent messages (optimized)
-        message_cache.load_from_db(message_data)
-        print(f"Loaded {len(message_data)} messages from database into cache")
+        
+        for email, messages in message_data.items():
+            message_cache.load_from_db(email, messages)
+            total_loaded += len(messages)
+            print(f"Loaded {len(messages)} messages for user {email}")
+        
+        print(f"Total loaded: {total_loaded} messages from database into cache")
     except Exception as e:
         print(f"Warning: Could not load messages from database: {e}")
         print("Make sure the database container is running: cd database && ./manage.sh start")
@@ -60,18 +66,37 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
     3. Route through security classification (RouterPrompt)
     4. Generate structured BookingResponse using tools if needed
     5. Save assistant response to database and cache
-    6. Return structured response with action classification
+    6. Return structured response with action classificationt
     """
     try:
-        # 1. Save user message to database and cache
-        user_message = save_message_and_cache(
-            db=db, 
-            role=MessageRole.USER, 
-            content=request.message
+        # 1. Handle user - get or create user with preferences
+        # Pydantic has already validated that lead.email and lead.name exist and are valid
+        user_email = request.lead.email
+        user_name = request.lead.name
+        user_preferences = request.preferences or {}
+        
+        # Get or create user in database
+        user = get_or_create_user(
+            db=db,
+            email=user_email,
+            name=user_name,
+            preferences=user_preferences
         )
         
-        # 2. Get chat history from cache for context
-        recent_messages = message_cache.get_message_history(limit=30, visible_only=False)  # Reduced for performance
+        # Use the actual email from the user object (in case it was generated)
+        user_email = user.email
+        
+        # 2. Save user message to database and cache with user_id
+        user_message = save_message_and_cache_with_user(
+            db=db, 
+            role=MessageRole.USER, 
+            content=request.message,
+            user_id=user.user_id,
+            user_email=user_email
+        )
+        
+        # 3. Get chat history from cache for this user
+        recent_messages = message_cache.get_message_history(user_email, limit=30, visible_only=False)
                 
 
         # Generate response using the agent
@@ -86,13 +111,13 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
                 "content": msg.get("message", {}).get("content", "")
             })
         
-        # Build context from request
+        # Build context from user preferences and request
         context = {
             "community_id": request.community_id,
-            "move_in_date": request.preferences.get("move_in") if request.preferences else None,
-            "bedrooms": request.preferences.get("bedrooms") if request.preferences else None,
-            "name": request.lead.get("name") if request.lead else None,
-            "email": request.lead.get("email") if request.lead else None,
+            "move_in_date": user.preferences.get("move_in") or (request.preferences.get("move_in") if request.preferences else None),
+            "bedrooms": user.preferences.get("bedrooms") or (request.preferences.get("bedrooms") if request.preferences else None),
+            "name": user.name,
+            "email": user.email,
         }
         
         # Get agent response using RouterPrompt (like in booking_agent/main.py)
@@ -107,12 +132,14 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
         import uuid
         response_uuid = str(uuid.uuid4())
         
-        assistant_message = save_message_and_cache_with_id(
+        assistant_message = save_message_and_cache_with_user(
             db=db,
-            message_id=response_uuid,
             role=MessageRole.ASSISTANT,
             content=assistant_content,
-            parent_id=user_message.id
+            user_id=user.user_id,
+            user_email=user_email,
+            parent_id=user_message.id,
+            message_id=response_uuid
         )
         
         # 5. Return the response using BookingResponse data
@@ -121,7 +148,8 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
             reply=booking_response.reply,
             created_date=assistant_message.created_date.isoformat(),  # Use the actual DB timestamp
             action=booking_response.action,
-            propose_time=booking_response.propose_time
+            propose_time=booking_response.propose_time,
+            parent_id=str(user_message.id)  # Include the parent_id (user message ID)
         )
         
         return response
@@ -135,12 +163,23 @@ async def reply_endpoint(request: ReplyRequest, db: Session = Depends(get_db)):
 
 
 @app.get("/api/messages")
-async def get_messages(limit: int = 100, include_hidden: bool = False):
-    """Get message history from cache, filtered by visibility"""
-    messages = message_cache.get_message_history(limit=limit, visible_only=not include_hidden)
+async def get_messages(email: str, limit: int = 100, include_hidden: bool = False):
+    """Get message history from cache for a specific user, filtered by visibility"""
+    messages = message_cache.get_message_history(email, limit=limit, visible_only=not include_hidden)
+    
+    # Clean up message format for frontend compatibility
+    cleaned_messages = []
+    for msg in messages:
+        cleaned_msg = {
+            "id": msg.get("id"),
+            "message": msg.get("message", {}),
+            "created_date": msg.get("created_date")
+        }
+        cleaned_messages.append(cleaned_msg)
+    
     return {
-        "messages": messages,
-        "count": len(messages)
+        "messages": cleaned_messages,
+        "count": len(cleaned_messages)
     }
 
 
@@ -148,35 +187,11 @@ async def get_messages(limit: int = 100, include_hidden: bool = False):
 # Helper Functions
 # =============================================================================
 
-def save_message_and_cache(db: Session, role: MessageRole, content: str, parent_id=None, visible_to_user: bool = True) -> Message:
-    """
-    Save a message to database and add to cache.
-    Returns the saved message object.
-    """
-    # Create JSONB data for storage
-    message_jsonb = {
-        "role": role.value,
-        "content": content,
-    }
-    
-    message = Message(
-        message=message_jsonb,
-        role=role.value,
-        parent_id=parent_id,
-        visible_to_user=visible_to_user
-    )
-    db.add(message)
-    db.commit()
-    
-    # Add to cache after successful database save
-    cache_data = message.to_dict()
-    message_cache.add_message(cache_data)
-    
-    return message
 
-def save_message_and_cache_with_id(db: Session, message_id: str, role: MessageRole, content: str, parent_id=None, visible_to_user: bool = True) -> Message:
+def save_message_and_cache_with_user(db: Session, role: MessageRole, content: str, user_id: str, user_email: str, parent_id=None, visible_to_user: bool = True, message_id: str = None) -> Message:
     """
-    Save a message to database and add to cache with a specific UUID.
+    Save a message to database and add to user's cache.
+    Optionally accepts a specific message_id, otherwise auto-generates one.
     Returns the saved message object.
     """
     import uuid
@@ -187,25 +202,29 @@ def save_message_and_cache_with_id(db: Session, message_id: str, role: MessageRo
         "content": content,
     }
     
-    message = Message(
-        id=uuid.UUID(message_id),  # Use the provided UUID
-        message=message_jsonb,
-        role=role.value,
-        parent_id=parent_id,
-        visible_to_user=visible_to_user
-    )
+    # Create message with optional custom ID
+    message_kwargs = {
+        "message": message_jsonb,
+        "role": role.value,
+        "parent_id": parent_id,
+        "user_id": user_id,
+        "visible_to_user": visible_to_user
+    }
+    
+    if message_id:
+        message_kwargs["id"] = uuid.UUID(message_id)
+    
+    message = Message(**message_kwargs)
     db.add(message)
     db.commit()
     
-    # Add to cache after successful database save
+    # Add to user's cache after successful database save
     cache_data = message.to_dict()
-    message_cache.add_message(cache_data)
+    message_cache.add_message(user_email, cache_data)
     
     return message
 
-def get_chat_history_from_cache(limit: int = 500, include_hidden: bool = True) -> list:
-    """Get chat history from cache for AI context (includes hidden messages by default)"""
-    return message_cache.get_message_history(limit=limit, visible_only=not include_hidden)
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -55,6 +55,9 @@ def get_available_units(
              OR (u.availability_status = 'notice' AND u.available_at <= :move_in_date))
         """)
         query_params['move_in_date'] = move_in_date
+    else:
+        # If no move-in date provided, only show currently available units
+        query_conditions.append("u.availability_status = 'available'")
     
     query = text(f"""
         -- Get available units with community validation

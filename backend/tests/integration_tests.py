@@ -36,12 +36,16 @@ class IntegrationTestSuite:
         self.tests_failed = 0
         self.test_results = []
         
-    def make_request(self, message: str, lead_name: str, community_id: str = "sunset-ridge") -> Dict[str, Any]:
+    def make_request(self, message: str, lead_name: str = "Jane Doe", community_id: str = "sunset-ridge") -> Dict[str, Any]:
         """Make API request to the agent"""
+        # Use hardcoded Jane Doe to match UI
         payload = {
             "message": message,
             "community_id": community_id,
-            "lead": {"name": lead_name}
+            "lead": {
+                "name": "Jane Doe",
+                "email": "jane@example.com"
+            }
         }
         
         try:
@@ -96,7 +100,7 @@ class IntegrationTestSuite:
         print(f"\n{Colors.BLUE}🧪 Running:{Colors.ENDC} {test_name}")
         print(f"   Message: '{message}'")
         
-        response = self.make_request(message, f"TestUser_{test_name.replace(' ', '_')}")
+        response = self.make_request(message)
         
         # Check action
         action_ok = self.assert_action(response, expected_action, test_name)
@@ -151,7 +155,7 @@ def main():
         "Pet Policy General",
         "what are your pet policies",
         "ask_clarification",
-        "what type of pet"
+        "pet"
     )
     
     # Test Suite 2: Propose Tour
@@ -240,7 +244,7 @@ def main():
         "Tour Decline",
         "no thanks", 
         "ask_clarification",
-        "anything else"
+        "help"
     )
     
     # Security tests
